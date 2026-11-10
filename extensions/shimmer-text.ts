@@ -36,9 +36,9 @@ export interface ShimmerRowLike {
 // ---------------------------------------------------------------------------
 
 /** One glyph of sweep progress per step. */
-const CHAR_SWEEP_MS = 180;
-/** Highlight half-width in glyphs. */
-const SWEEP_BLUR = 2.8;
+const CHAR_SWEEP_MS = 95;
+/** Highlight half-width in glyphs — a tight crest, so a clear flash travels the row instead of a broad wash. */
+const SWEEP_BLUR = 1.15;
 /** Ticker cadence. */
 const SHIMMER_FRAME_MS = 60;
 
@@ -112,8 +112,8 @@ export function renderShimmerText(
     const count = [...body].length;
     if (count === 0) return "";
 
-    const sweepMs = Math.max(1, count - 1 + SWEEP_BLUR * 6) * CHAR_SWEEP_MS + 4;
-    const rest = 900 + (Math.abs(seed) % 800);
+    const sweepMs = Math.max(1, count - 1 + SWEEP_BLUR * 6) * CHAR_SWEEP_MS + 120;
+    const rest = 650 + (Math.abs(seed) % 550);
     const period = sweepMs + rest;
     const front = ((nowMs + (Math.abs(seed) % period)) % period) / CHAR_SWEEP_MS - SWEEP_BLUR * 3;
     const hoverLift = hovered ? 0.08 : 0;
