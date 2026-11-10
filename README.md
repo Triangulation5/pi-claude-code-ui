@@ -47,7 +47,7 @@ With labels on, a bash row shows what the command is for instead of the command 
 
 `/cc-tools intent` picks where labels come from:
 
-- `model` (default): the model writes the label as an extra argument of each bash call. This adds a field to the bash tool and a line to the model's instructions. There is no extra request; the label costs a few output tokens on each call.
+- `model` (default since 1.0.112): the model writes the label as an extra argument of each bash call. This adds a field to the bash tool and a line to the model's instructions. There is no extra request; the label costs a few output tokens on each call. Set `"bashIntent": "off"` (or run `/cc-tools intent off`) to go back to plain commands.
 - `off`: no labels; rows show the command.
 - `local`: Apple's on-device model writes the label on your Mac, so nothing the model sees changes. It needs macOS 26 or newer on Apple silicon with Apple Intelligence turned on, and the Xcode command line tools for a one-time build of a small helper. The row shows the command until the label arrives, about 0.3 to 0.6 seconds after the command starts. Labels are cached, so a resumed session shows them without asking again.
 
@@ -90,7 +90,7 @@ With [pi-subagents](https://github.com/tintinweb/pi-subagents), `Agent` calls ge
 | Command | What it does |
 | --- | --- |
 | `/cc-tools` | Show the current tool settings |
-| `/cc-tools outlines`, `transparent`, `default` | Tool row style: rules around each tool (default), no rules, or pi's own backgrounds |
+| `/cc-tools outlines`, `transparent`, `default` | Tool row style: rules around each tool, no rules (default), or pi's own backgrounds |
 | `/cc-tools group on`, `off`, `toggle` | Fold consecutive tool calls into one row |
 | `/cc-tools thinking live`, `full`, `latest` | How finished thinking is shown |
 | `/cc-tools intent off`, `model`, `local`, `status` | Where bash labels come from; applies after `/reload` |
@@ -109,11 +109,11 @@ Commands that change a setting save it to the settings file, and the change appl
 
 ## Settings
 
-Settings are read from `.pi/settings.json` in the project and from the agent settings file, `$PI_CODING_AGENT_DIR/settings.json` (by default `~/.pi/settings.json`). The values below are the defaults.
+Settings are read from `.pi/settings.json` in the project and from the agent settings file, `$PI_CODING_AGENT_DIR/settings.json` (by default `~/.pi/agent/settings.json`). The values below are the defaults.
 
 ```json
 {
-  "toolBackground": "outlines",
+  "toolBackground": "transparent",
   "groupToolCalls": true,
   "thinkingMode": "live",
   "terminalTheme": true,
@@ -142,7 +142,7 @@ The screenshots on this page use `"toolBackground": "transparent"`.
 
 | Setting | Default | Description |
 | --- | --- | --- |
-| `toolBackground` | `outlines` | `outlines` draws a rule above and below each tool (`border` also works), `transparent` draws none, `default` keeps pi's tool backgrounds |
+| `toolBackground` | `transparent` | `transparent` draws no rules, `outlines` draws a rule above and below each tool (`border` also works), `default` keeps pi's tool backgrounds |
 | `groupToolCalls` | `true` | Fold consecutive tool calls into one row |
 | `thinkingMode` | `live` | `live` collapses finished thinking to `Thought for Xs`, `full` keeps it expanded, `latest` hides it in all but the latest message |
 | `previewLines` | `8` | Lines in a collapsed preview |
@@ -161,7 +161,7 @@ The screenshots on this page use `"toolBackground": "transparent"`.
 
 | Setting | Default | Description |
 | --- | --- | --- |
-| `bashIntent` | `model` | Labels on bash rows in place of the command: `off`, `model` (the model writes them; changes the bash tool and its instructions) or `local` (Apple's on-device model writes them on this Mac). `true` means `model`. Applies on the next start or `/reload` |
+| `bashIntent` | `model` (since 1.0.112) | Labels on bash rows in place of the command: `model` (since 1.0.112; the model writes them; changes the bash tool and its instructions), `local` (Apple's on-device model writes them on this Mac), or `off` for plain commands as before 1.0.112. `true` means `model`. Applies on the next start or `/reload` |
 | `bashCollapsedLines` | `10` | Output lines shown for a collapsed bash row |
 | `bashCommandPreviewLines` | `0` | Lines of a multi-line command shown under a running or failed bash row. `Ctrl+O` always shows the whole command |
 | `liveToolPreview` | `false` | Show the latest output lines under a running tool |

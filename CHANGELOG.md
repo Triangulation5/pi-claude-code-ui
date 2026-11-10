@@ -3,6 +3,31 @@
 > [!IMPORTANT]
 > **1.0.69 — package rename (permanent).** Canonical npm name is now [`pi-claude-code-ui`](https://www.npmjs.com/package/pi-claude-code-ui). `pi-claude-style-tools` is legacy and will not receive further releases. Install with `pi install npm:pi-claude-code-ui` or `npm i pi-claude-code-ui`.
 
+## 1.0.112 — 2026-11-10
+
+> [!WARNING]
+> **Behavior change: bash labels are now on by default.** Starting with this version, bash rows show a short purpose label (like `Bash · Run the test suite`) written by the model, instead of the raw command. This is the `bashIntent: "model"` mode: it adds a `displaySummary` field to the bash tool and one line to the model's instructions. If you want the old plain-command rows back, set `"bashIntent": "off"` in `~/.pi/agent/settings.json` or run `/cc-tools intent off` (then `/reload`). Applies on the next start or `/reload`.
+
+### Changed
+
+- **`bashIntent` now defaults to `model`** (was `off`). Explicit values are unchanged: `"off"` and `false` still turn labels off, `"local"` uses the on-device model, and unknown values now fall back to the default instead of off.
+
+## 1.0.111 — 2026-11-10
+
+> [!WARNING]
+> **Your settings may have moved.** Since 1.0.110 the extension reads the same file pi does, `~/.pi/agent/settings.json` (or `$PI_CODING_AGENT_DIR/settings.json`). Earlier versions read `~/.pi/settings.json`, a file pi never loads. If your `toolBackground`, `thinkingMode`, `terminalTheme` or `themeAdaptive` keys live in the old file, copy them into `~/.pi/agent/settings.json` once, or set them again with `/cc-tools` and `/cc-theme`. Until you do, the defaults apply.
+
+### Changed
+
+- **`toolBackground` defaults to `transparent`.** New installs, and anyone whose setting was left behind in the old file, get tool rows without rules. `/cc-tools outlines` brings the rules back.
+
+## 1.0.110 — 2026-11-10
+
+### Fixed
+
+- **Settings were read from the wrong file** ([#45](https://github.com/FammasMaz/pi-cc-tools/issues/45)). The settings path is now `getAgentDir()/settings.json`, the file pi itself reads, so `/cc-tools` changes survive a restart and saving works on Windows.
+- **Clicking in the editor showed "Jump to latest message"** ([#46](https://github.com/FammasMaz/pi-cc-tools/issues/46)). The transcript hold now applies only to presses inside the transcript, and release restores follow when the view is still at its end after a layout change.
+
 ## 1.0.109 — 2026-11-04
 
 ### Fixed

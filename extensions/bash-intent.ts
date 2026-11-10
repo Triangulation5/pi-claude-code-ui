@@ -10,6 +10,9 @@
 //
 // Local mode runs a small Swift helper (HELPER_SOURCE below, compiled on first use and cached). Labels are requested when a command starts, never for commands that are only being
 // redrawn, and are cached on disk so a resumed session shows them without asking again.
+//
+// Since 1.0.112 the default is "model"; set "bashIntent" to "off"
+// (or run /cc-tools intent off) to get the old, unlabeled behavior back.
 
 import { execFile, spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -20,11 +23,15 @@ import { join } from "node:path";
 export type BashIntentMode = "off" | "model" | "local";
 export const BASH_INTENT_MODES: readonly BashIntentMode[] = ["off", "model", "local"];
 
-/** `true` (the original boolean setting) means "model"; anything unknown means off. */
-export function normalizeBashIntentMode(value: unknown): BashIntentMode {
+/**
+ * `true` (the original boolean setting) means "model". Unset and unknown values fall back
+ * to the default ("model" since 1.0.112); only an explicit false or "off" turns labels off.
+ */
+export function normalizeBashIntentMode(value: unknown, defaultMode: BashIntentMode = "model"): BashIntentMode {
 	if (value === true || value === "model") return "model";
 	if (value === "local") return "local";
-	return "off";
+	if (value === false || value === "off") return "off";
+	return defaultMode;
 }
 
 /** Why local labels cannot run here, or undefined when they can. */

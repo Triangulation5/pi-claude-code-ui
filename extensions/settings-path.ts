@@ -1,4 +1,6 @@
+import { getAgentDir } from "@earendil-works/pi-coding-agent";
+
+/** Pi's own settings file (`<agentDir>/settings.json`, by default `~/.pi/agent/settings.json`). */
 export function getUserSettingsPath(): string {
-	const agentDir = process.env.PI_CODING_AGENT_DIR || `${process.env.HOME ?? ""}/.pi`;
-	return `${agentDir}/settings.json`;
+	return `${getAgentDir()}/settings.json`;
 }

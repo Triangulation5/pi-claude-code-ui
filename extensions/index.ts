@@ -147,7 +147,7 @@ const TRAILING_MARK = "  · ";
 const KITTY_IMAGE_PREFIX = "\x1b_G";
 const ITERM2_IMAGE_PREFIX = "\x1b]1337;File=";
 
-let toolBackgroundMode: "default" | "transparent" | "outlines" = "outlines";
+let toolBackgroundMode: "default" | "transparent" | "outlines" = "transparent";
 
 interface SettingsFile {
 	toolBackground?: "default" | "transparent" | "outlines" | "border";
@@ -267,8 +267,6 @@ function bustSpinnerSettingsCache(): void {
 
 function writeSettingsKey(key: string, value: unknown): void {
 	_settingsCache = null; // invalidate cache on write
-	const home = process.env.HOME ?? "";
-	if (!home && !process.env.PI_CODING_AGENT_DIR) return;
 	const path = getUserSettingsPath();
 	const dir = dirname(path);
 	let settings: Record<string, unknown> = {};
@@ -296,7 +294,7 @@ function syncToolBackgroundMode(): void {
 	const settings = readSettings();
 	// Backward compat: "border" was renamed to "outlines"
 	const raw = settings.toolBackground === "border" ? "outlines" : settings.toolBackground;
-	toolBackgroundMode = raw ?? "outlines";
+	toolBackgroundMode = raw ?? "transparent";
 }
 
 function setThemeBg(theme: unknown, key: string, value: string): void {
@@ -2012,7 +2010,7 @@ export function dispatchMouseWithClickFixes(tui: any, input: RawMouseEvent, orig
 	const leftButton = (raw.button & 64) === 0 && (raw.button & 3) === 0;
 	const leftPress = leftButton && (raw.button & 32) === 0 && !raw.release;
 	const leftRelease = leftButton && raw.release === true;
-	if (leftPress) holdViewForPress(tui);
+	if (leftPress) holdViewForPress(tui, raw.x, raw.y);
 	else if (leftButton && (raw.button & 32) !== 0) armHeldViewTimer(tui); // still dragging
 	if (leftRelease) clickOpenedRow = false;
 	const result = original(raw);
@@ -2020,11 +2018,15 @@ export function dispatchMouseWithClickFixes(tui: any, input: RawMouseEvent, orig
 	return result;
 }
 
-function holdViewForPress(tui: any): void {
+function holdViewForPress(tui: any, x: number, y: number): void {
 	releaseHeldView(false);
 	try {
 		const view = tui?.getPrimaryScrollView?.();
 		if (!view || view.isFollowingEnd !== true || typeof view.scrollTo !== "function") return;
+		// Only presses in the transcript need the hold. A click in the editor (to move the
+		// cursor) must not stop the transcript from following its end, which also showed
+		// pi's "Jump to latest message" indicator while the button was down.
+		if (!pressInsideScrollView(tui, view, x, y)) return;
 		view.scrollTo(view.scrollTop, { disableFollow: true });
 		heldView = { view, top: view.scrollTop };
 		// A release can go missing (the pointer left the window); never stay held.
@@ -2046,11 +2048,34 @@ function releaseHeldView(follow: boolean, tui?: any): void {
 	if (held.timer) clearTimeout(held.timer);
 	if (!follow || clickOpenedRow) return;
 	try {
-		if (held.view.scrollTop === held.top && held.view.isFollowingEnd !== true && typeof held.view.scrollToEnd === "function") {
-			held.view.scrollToEnd();
+		const view = held.view;
+		if (view.isFollowingEnd === true || typeof view.scrollToEnd !== "function") return;
+		// Still where the press left it, or still at the end (a layout change while held, e.g. a
+		// status row disappearing, clamps scrollTop without any intentional scrolling).
+		const maxTop = Math.max(0, (Number(view.contentHeight) || 0) - (Number(view.viewportHeight) || 0));
+		if (view.scrollTop === held.top || view.scrollTop === maxTop) {
+			view.scrollToEnd();
 			tui?.requestRender?.();
 		}
 	} catch { /* view gone */ }
+}
+
+/** Whether a screen cell lies inside the scroll view's box of the current fullscreen layout. */
+export function pressInsideScrollView(tui: any, view: any, x: number, y: number): boolean {
+	const root = tui?.currentLayout?.root;
+	if (!root) return true; // no layout to check against: keep the old behaviour
+	const find = (box: any): any => {
+		if (box?.scrollView === view) return box;
+		for (const child of box?.children ?? []) {
+			const match = find(child);
+			if (match) return match;
+		}
+		return undefined;
+	};
+	const box = find(root);
+	if (!box?.rect) return true;
+	const r = box.rect;
+	return x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height;
 }
 
 /** The mouse event pi should see, or undefined to drop it (a tiny move while pressed). */
@@ -5182,9 +5207,8 @@ function themeChosenOnCommandLine(): boolean {
 
 /** Pi's saved `theme` setting (may be a "light/dark" pair), from pi's own settings file. */
 function readPiThemeSetting(): string | undefined {
-	const agentDir = process.env.PI_CODING_AGENT_DIR || `${process.env.HOME ?? ""}/.pi/agent`;
 	try {
-		const raw = JSON.parse(readFileSync(`${agentDir}/settings.json`, "utf8"));
+		const raw = JSON.parse(readFileSync(getUserSettingsPath(), "utf8"));
 		return typeof raw?.theme === "string" && raw.theme ? raw.theme : undefined;
 	} catch {
 		return undefined;
@@ -8321,11 +8345,11 @@ export default function (pi: ExtensionAPI) {
 						description:
 							m === "group" ? "Toggle grouped adjacent/concurrent tool rows"
 							: m === "thinking" ? "Thinking display: live (default), full, or latest"
-							: m === "intent" ? "Purpose labels on bash rows: model (default), off, or local"
+							: m === "intent" ? "Purpose labels on bash rows: model (default), local, or off"
 							: m === "detail" ? "Toggle Ctrl+Shift+O extra-detail mode"
 							: m === "status" ? "Show tool UI settings"
-							: m === "outlines" ? "Horizontal rules around each tool (default)"
-							: m === "transparent" ? "No borders or backgrounds"
+							: m === "outlines" ? "Horizontal rules around each tool"
+							: m === "transparent" ? "No borders or backgrounds (default)"
 							: "Pi built-in tool backgrounds",
 					}));
 			}
@@ -8990,7 +9014,7 @@ export default function (pi: ExtensionAPI) {
 			},
 		},
 		required: [...(bashTool.parameters.required ?? []), "displaySummary"],
-	} as typeof bashTool.parameters;
+	} as unknown as typeof bashTool.parameters;
 	const bashIntentGuidelines = bashIntentEnabled
 		? [
 			...((bashTool as any).promptGuidelines ?? []),
