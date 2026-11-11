@@ -214,10 +214,12 @@ interface SettingsFile {
 	spinnerAnimatedDots?: boolean;
 	/** Spinner glyph speed: slow, medium (default), or fast. */
 	spinnerSpeed?: "slow" | "medium" | "fast";
-	/** Spinner glyph animation: asterisk movement (default) or breathing. */
+	/** Spinner glyph animation: the default glyph cycle or breathing stars. */
 	spinnerStyle?: "asterisk" | "breathing";
 	/** Direction of spinner and collapsed-thinking shimmer. */
 	spinnerShimmerDirection?: "left-to-right" | "right-to-left";
+	/** Spinner-text shimmer animation: traveling sweep or double flash. */
+	spinnerShimmerStyle?: "sweep" | "flash";
 	/** Optional #RGB/#RRGGBB highlight color for spinner and thinking shimmer. */
 	spinnerShimmerColor?: string;
 	/**
@@ -3024,6 +3026,12 @@ function replaceHiddenThinkingPlaceholders(container: { children?: any[] }, mess
 		if (inner instanceof HiddenThinkingSummary || (inner as any)?.constructor?.name === "HiddenThinkingSummary") {
 			if (!firstReplaced) {
 				inner.setSummary(summary);
+				if (host) {
+					// Components can be rebuilt around an existing summary row; keep
+					// the shimmer ticker pointed at the current host and message.
+					(inner as any)[SHIMMER_HOST_KEY] = host;
+					noteShimmerRow(inner, message);
+				}
 				firstReplaced = true;
 			} else {
 				container.children.splice(i, 1);
@@ -8643,7 +8651,7 @@ export default function (pi: ExtensionAPI) {
 	pi.registerCommand("cc-spinner", {
 		description: "Set spinner colors, style, speed, and dots, or preview current values",
 		getArgumentCompletions(prefix) {
-			const subCommands = ["verb", "status", "dots", "speed", "style", "shimmer-direction", "shimmer-color", "reset", "preview"];
+			const subCommands = ["verb", "status", "dots", "speed", "style", "shimmer-direction", "shimmer-style", "shimmer-color", "reset", "preview"];
 			const parts = prefix.split(/\s+/);
 			if (parts.length <= 1) {
 				return subCommands
@@ -8656,8 +8664,9 @@ export default function (pi: ExtensionAPI) {
 							: c === "status" ? "Set the color key used for the spinner status suffix"
 							: c === "dots" ? "Toggle animated dots after the spinner text"
 							: c === "speed" ? "Set the spinner glyph speed"
-							: c === "style" ? "Choose asterisk movement or breathing animation"
+							: c === "style" ? "Choose the default glyph cycle or breathing stars"
 							: c === "shimmer-direction" ? "Set the shimmer sweep direction"
+							: c === "shimmer-style" ? "Choose a traveling sweep or double flash on spinner text"
 							: c === "shimmer-color" ? "Set the shimmer highlight color"
 							: c === "reset" ? "Reset both verb and status to defaults (borderAccent, muted)"
 							: "Preview every theme color key with its current sample",
@@ -8686,6 +8695,12 @@ export default function (pi: ExtensionAPI) {
 				return ["left", "right", "status"]
 					.filter((mode) => mode.startsWith(value))
 					.map((mode) => ({ value: `shimmer-direction ${mode}`, label: mode, description: "Choose the shimmer sweep direction" }));
+			}
+			if (parts[0]?.toLowerCase() === "shimmer-style") {
+				const value = (parts[1] ?? "").toLowerCase();
+				return ["sweep", "flash", "status"]
+					.filter((mode) => mode.startsWith(value))
+					.map((mode) => ({ value: `shimmer-style ${mode}`, label: mode, description: "Choose the spinner-text shimmer animation" }));
 			}
 			if (parts[0]?.toLowerCase() === "shimmer-color") {
 				const value = (parts[1] ?? "").toLowerCase();
@@ -8721,17 +8736,18 @@ export default function (pi: ExtensionAPI) {
 			const shimmerDirection = settings.spinnerShimmerDirection === "right-to-left"
 				? "right-to-left"
 				: "left-to-right";
+			const shimmerStyle = settings.spinnerShimmerStyle === "flash" ? "flash" : "sweep";
 			const shimmerColor = settings.spinnerShimmerColor ?? "default";
 
 			if (!sub || sub === "preview") {
 				if (!ctx.hasUI) return;
 				if (!theme) {
-					ctx.ui.notify(`Spinner verb: ${currentVerb}, status: ${currentStatus}, style=${style}, speed=${speed}, dots=${animatedDots ? "on" : "off"}, shimmer=${shimmerDirection} ${shimmerColor} (no theme)`, "info");
+					ctx.ui.notify(`Spinner verb: ${currentVerb}, status: ${currentStatus}, style=${style}, speed=${speed}, dots=${animatedDots ? "on" : "off"}, shimmer=${shimmerStyle} ${shimmerDirection} ${shimmerColor} (no theme)`, "info");
 					return;
 				}
 				const lines: string[] = [
 					`Current: verb=${currentVerb}, status=${currentStatus}, style=${style}, speed=${speed}, dots=${animatedDots ? "on" : "off"}`,
-					`Shimmer: ${shimmerDirection}, color=${shimmerColor}`,
+					`Shimmer: ${shimmerStyle}, ${shimmerDirection}, color=${shimmerColor}`,
 					"",
 					"Preview of common theme keys (pick one for verb or status):",
 				];
@@ -8818,6 +8834,22 @@ export default function (pi: ExtensionAPI) {
 				return;
 			}
 
+			if (sub === "shimmer-style") {
+				const mode = (parts[1] ?? "status").toLowerCase();
+				if (mode === "status") {
+					if (ctx.hasUI) ctx.ui.notify(`Spinner shimmer style: ${shimmerStyle}`, "info");
+					return;
+				}
+				if (mode !== "sweep" && mode !== "flash") {
+					if (ctx.hasUI) ctx.ui.notify("Usage: /cc-spinner shimmer-style sweep|flash|status", "error");
+					return;
+				}
+				writeSettingsKey("spinnerShimmerStyle", mode);
+				bustSpinnerSettingsCache();
+				if (ctx.hasUI) ctx.ui.notify(`Spinner shimmer style → ${mode}`, "info");
+				return;
+			}
+
 			if (sub === "shimmer-color") {
 				const value = (parts[1] ?? "status").toLowerCase();
 				if (value === "status") {
@@ -8841,7 +8873,7 @@ export default function (pi: ExtensionAPI) {
 			}
 
 			if (sub !== "verb" && sub !== "status") {
-				if (ctx.hasUI) ctx.ui.notify("Usage: /cc-spinner verb|status <key> | style asterisk|breathing|status | speed slow|medium|fast|status | dots on|off|toggle|status | shimmer-direction left|right|status | shimmer-color #RRGGBB|status|reset | reset | preview", "error");
+				if (ctx.hasUI) ctx.ui.notify("Usage: /cc-spinner verb|status <key> | style asterisk|breathing|status | speed slow|medium|fast|status | dots on|off|toggle|status | shimmer-direction left|right|status | shimmer-style sweep|flash|status | shimmer-color #RRGGBB|status|reset | reset | preview", "error");
 				return;
 			}
 

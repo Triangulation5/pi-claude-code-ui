@@ -22,6 +22,7 @@
   "spinnerSpeed": "medium",
   "spinnerStyle": "asterisk",
   "spinnerShimmerDirection": "left-to-right",
+  "spinnerShimmerStyle": "sweep",
   "terminalTheme": true,
   "diffColors": {}
 }

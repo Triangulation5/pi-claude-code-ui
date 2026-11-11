@@ -13,7 +13,7 @@
  * cache (shared via Symbol.for), cleared the same way the extension caches do.
  */
 
-import { mixRgb, type Rgb } from "./theme-colors";
+import { mixRgb, type Rgb } from "./theme-colors.ts";
 
 export const SHIMMER_LIVE_BODY = "Thinking...";
 
@@ -41,6 +41,9 @@ const CHAR_SWEEP_MS = 95;
 const SWEEP_BLUR = 1.15;
 /** Ticker cadence. */
 const SHIMMER_FRAME_MS = 60;
+const FLASH_PULSE_MS = 180;
+const FLASH_SECOND_START_MS = 340;
+const FLASH_SECOND_STRENGTH = 0.55;
 
 const FALLBACK_BASE: Rgb = { r: 140, g: 140, b: 140 };
 
@@ -91,13 +94,28 @@ function parseShimmerColor(value: string | undefined): Rgb | null {
 }
 
 export type ShimmerDirection = "left-to-right" | "right-to-left";
+export type ShimmerStyle = "sweep" | "flash";
+
+function pulseStrength(elapsedMs: number, startMs: number, strength: number): number {
+    const progress = (elapsedMs - startMs) / FLASH_PULSE_MS;
+    if (progress <= 0 || progress >= 1) return 0;
+    return Math.sin(Math.PI * progress) * strength;
+}
+
+function doubleFlashStrength(elapsedMs: number): number {
+    return Math.max(
+        pulseStrength(elapsedMs, 0, 1),
+        pulseStrength(elapsedMs, FLASH_SECOND_START_MS, FLASH_SECOND_STRENGTH),
+    );
+}
 
 /**
- * Renders `body` with the traveling highlight applied per glyph.
+ * Renders `body` with either a traveling per-glyph highlight or a double flash.
  *
  * The highlight glides across the glyphs and rests between sweeps, keeping the
- * base text steady instead of pulsing. `intensity` can ease the highlight back
- * to the base color; `hovered` rows keep their normal brighter base styling.
+ * base text steady instead of pulsing. Flash mode brightens the whole string
+ * twice; `elapsedMs` is measured from that flash's start. `intensity` eases
+ * either effect back to the base color.
  */
 export function renderShimmerText(
     body: string,
@@ -105,7 +123,13 @@ export function renderShimmerText(
     seed: number,
     hovered = false,
     nowMs: number = Date.now(),
-    options: { direction?: ShimmerDirection; color?: string; intensity?: number } = {},
+    options: {
+        direction?: ShimmerDirection;
+        color?: string;
+        intensity?: number;
+        style?: ShimmerStyle;
+        elapsedMs?: number;
+    } = {},
 ): string {
     const base = parseAnsiColorToRgb(baseAnsi) ?? FALLBACK_BASE;
     const highlight = parseShimmerColor(options.color) ?? highlightFor(base);
@@ -118,6 +142,13 @@ export function renderShimmerText(
     const front = ((nowMs + (Math.abs(seed) % period)) % period) / CHAR_SWEEP_MS - SWEEP_BLUR * 3;
     const hoverLift = hovered ? 0.08 : 0;
     const intensity = Math.max(0, Math.min(1, options.intensity ?? 1));
+
+    if (options.style === "flash") {
+        const amount = Math.max(0, Math.min(1, doubleFlashStrength(options.elapsedMs ?? 0) * intensity + hoverLift));
+        const color = mixRgb(base, highlight, amount);
+        const ansi = `\x1b[38;2;${Math.round(color.r)};${Math.round(color.g)};${Math.round(color.b)}m`;
+        return `${ansi}${body}\x1b[0m`;
+    }
 
     let out = "";
     let index = 0;
@@ -157,6 +188,10 @@ export function noteShimmerRow(row: object, phaseKey?: object): void {
     }
     if (!seedByKey.has(phaseKey)) seedByKey.set(phaseKey, Math.floor(Math.random() * 4_000));
     rowKeyByRow.set(row, phaseKey);
+    if ((row as ShimmerRowLike).isShimmerText?.()) {
+        targetLive = true;
+        ensureTicker();
+    }
 }
 
 /** The row is live: start the ticker. */

@@ -35,7 +35,7 @@ Shell commands that only change files are drawn the same way. `sed -i`, `perl -p
 
 ## Spinner
 
-While a tool runs, the working line names it: `Running npm test...`, `Reading stats.py...`, `Searching for TODO...`, `Waiting for agent: Find edge cases...`. When animated dots are off, a plain `...` remains. While the model thinks, it shows a playful verb instead; verbs fade briefly before switching and typing in with staggered delays, and the text shimmers occasionally. Toggle animated dots with `/cc-spinner dots on|off|toggle`; choose asterisk movement or breathing with `/cc-spinner style asterisk|breathing`. The token count covers everything the model writes for the request, including thinking and tool arguments, and counts up smoothly as text streams in.
+While a tool runs, the working line names it: `Running npm test...`, `Reading stats.py...`, `Searching for TODO...`, `Waiting for agent: Find edge cases...`. When animated dots are off, a plain `...` remains. While the model thinks, it shows a playful verb instead; verbs fade briefly before switching and typing in with staggered delays. The spinner can use a traveling text shimmer or a two-pulse flash; the flash affects only the verb, with a brighter first pulse and a dimmer second. Toggle animated dots with `/cc-spinner dots on|off|toggle`; choose the default Pi glyph cycle or a Claude-like star-breathing cycle with `/cc-spinner style asterisk|breathing`. The asterisk style matches the spinner cycle from `pi install npm:pi-claude-code-ui`. The collapsed `Thinking...` row keeps its own traveling shimmer while it streams.
 
 ![The working line during a run](https://raw.githubusercontent.com/FammasMaz/pi-cc-tools/master/docs/media/spinner.gif)
 
@@ -100,9 +100,10 @@ With [pi-subagents](https://github.com/tintinweb/pi-subagents), `Agent` calls ge
 | `/cc-spinner preview` | Show the theme colors available for the spinner |
 | `/cc-spinner verb <key>`, `status <key>`, `reset` | Recolor the spinner's verb or its status text |
 | `/cc-spinner dots on`, `off`, `toggle`, `status` | Toggle animated dots after the spinner text (off by default) |
-| `/cc-spinner style asterisk`, `breathing`, `status` | Choose the moving-asterisk or breathing spinner style (asterisk by default) |
+| `/cc-spinner style asterisk`, `breathing`, `status` | Choose the default Pi glyph cycle or star-breathing spinner style (asterisk by default) |
 | `/cc-spinner speed slow`, `medium`, `fast`, `status` | Change the spinner movement speed (medium by default) |
 | `/cc-spinner shimmer-direction left`, `right`, `status` | Set the shimmer sweep direction |
+| `/cc-spinner shimmer-style sweep`, `flash`, `status` | Set the working-text shimmer (a sweep or double flash) |
 | `/cc-spinner shimmer-color #RGB|#RRGGBB`, `status`, `reset` | Customize the shimmer highlight color |
 
 Commands that change a setting save it to the settings file, and the change applies right away.
@@ -180,9 +181,10 @@ The screenshots on this page use `"toolBackground": "transparent"`.
 | `spinnerVerbColor` | `borderAccent` | Theme color of the spinner's verb |
 | `spinnerStatusColor` | `muted` | Theme color of the spinner's status text |
 | `spinnerAnimatedDots` | `false` | Animate dots after the spinner text; toggle with `/cc-spinner dots on|off|toggle` |
-| `spinnerStyle` | `asterisk` | Spinner animation: moving asterisk or `breathing` |
+| `spinnerStyle` | `asterisk` | Spinner animation: default Pi glyph cycle or Claude-like star-breathing cycle |
 | `spinnerSpeed` | `medium` | Spinner movement speed: `slow`, `medium` or `fast` |
 | `spinnerShimmerDirection` | `left-to-right` | Shimmer direction for spinner text and collapsed active thinking |
+| `spinnerShimmerStyle` | `sweep` | Spinner-text shimmer: traveling sweep or double flash; collapsed `Thinking...` stays a sweep |
 | `spinnerShimmerColor` | unset | Optional `#RGB` or `#RRGGBB` highlight color for spinner text and collapsed active thinking |
 
 With `themeAdaptive` on, colors come from these pi theme tokens:

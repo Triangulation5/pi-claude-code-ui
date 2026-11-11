@@ -7,7 +7,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Loader } from "@earendil-works/pi-tui";
 
 import { getUserSettingsPath } from "./settings-path";
-import { renderShimmerText } from "./shimmer-text";
+import { renderShimmerText, type ShimmerStyle } from "./shimmer-text";
 import { createSpinnerTextAnimator, type SpinnerTextAnimator } from "./spinner-animation";
 import type { SpawnScheduler } from "./spin-dots";
 
@@ -41,6 +41,7 @@ let _spinnerSettingsCache: {
         speed: SpinnerSpeed;
         style: SpinnerStyle;
         shimmerDirection: ShimmerDirection;
+        shimmerStyle: ShimmerStyle;
         shimmerColor?: string;
     };
     expires: number;
@@ -59,6 +60,7 @@ function readSpinnerSettings(): {
     speed: SpinnerSpeed;
     style: SpinnerStyle;
     shimmerDirection: ShimmerDirection;
+    shimmerStyle: ShimmerStyle;
     shimmerColor?: string;
 } {
     const now = Date.now();
@@ -75,6 +77,7 @@ function readSpinnerSettings(): {
     let speed: SpinnerSpeed = "medium";
     let style: SpinnerStyle = "asterisk";
     let shimmerDirection: ShimmerDirection = "left-to-right";
+    let shimmerStyle: ShimmerStyle = "sweep";
     let shimmerColor: string | undefined;
     // Spinner glyph is still pi's accent. Use borderAccent for the verb so it
     // feels themed and lively without collapsing into the exact same Claude
@@ -96,11 +99,14 @@ function readSpinnerSettings(): {
                 if (raw.spinnerShimmerDirection === "left-to-right" || raw.spinnerShimmerDirection === "right-to-left") {
                     shimmerDirection = raw.spinnerShimmerDirection;
                 }
+                if (raw.spinnerShimmerStyle === "sweep" || raw.spinnerShimmerStyle === "flash") {
+                    shimmerStyle = raw.spinnerShimmerStyle;
+                }
                 if (typeof raw.spinnerShimmerColor === "string") shimmerColor = raw.spinnerShimmerColor;
             }
         } catch { /* ignore */ }
     }
-    const value = { adaptive, verbColor, statusColor, animatedDots, speed, style, shimmerDirection, shimmerColor };
+    const value = { adaptive, verbColor, statusColor, animatedDots, speed, style, shimmerDirection, shimmerStyle, shimmerColor };
     _spinnerSettingsCache = { value, expires: now + SPINNER_SETTINGS_TTL_MS };
     return value;
 }
@@ -172,9 +178,10 @@ function getDefaultSpinnerCharacters(): string[] {
 }
 
 const SPINNER_CHARS = getDefaultSpinnerCharacters();
-const BREATHING_FRAMES = [...SPINNER_CHARS, ...[...SPINNER_CHARS].reverse()];
-// Pulse a centered asterisk in place; breathing mode keeps its separate frame set.
-const ASTERISK_FRAMES = ["*", "✢", "✳", "✶", "✻", "✽", "✻", "✶", "✳", "✢"];
+// The star shapes grow and contract around the same centered point.
+const BREATHING_FRAMES = ["·", "✧", "✦", "✶", "✹", "✶", "✦", "✧"];
+// Match the default npm package's glyph cycle and cadence.
+const ASTERISK_FRAMES = [...SPINNER_CHARS, ...[...SPINNER_CHARS].reverse()];
 // Medium preserves the existing cadence; slow and fast are selectable at runtime.
 const LOADER_INTERVALS_MS: Record<SpinnerSpeed, number> = { slow: 260, medium: 170, fast: 110 };
 const LOADER_LAST_TEXT = Symbol.for("pi-claude-style-tools:loader-last-text");
@@ -527,6 +534,7 @@ const SPINNER_VERBS = [
     "Bribing the compiler",
     "Negotiating with entropy",
     "Whispering to the bits",
+    "Rewriting in binary",
     "Tickling the stack",
     "Massaging the heap",
     "Appeasing the garbage collector",
@@ -1082,6 +1090,7 @@ export default function (pi: ExtensionAPI) {
     // Working-line text animation: typewriter verb switching + optional dots.
     let textAnimator: SpinnerTextAnimator | null = null;
     let spinnerShimmerUntil = 0;
+    let spinnerShimmerStartedAt = 0;
     let spinnerShimmerSeed = 0;
     let spinnerShimmerDelay: (() => void) | null = null;
     let spinnerShimmerFrame: (() => void) | null = null;
@@ -1149,7 +1158,9 @@ export default function (pi: ExtensionAPI) {
             ? `${renderShimmerText(verb, CLAUDE_ORANGE, spinnerShimmerSeed, false, Date.now(), {
                 direction: shimmerSettings?.shimmerDirection,
                 color: shimmerSettings?.shimmerColor,
-                intensity: shimmerIntensity,
+                style: shimmerSettings?.shimmerStyle,
+                elapsedMs: now - spinnerShimmerStartedAt,
+                intensity: shimmerSettings?.shimmerStyle === "flash" ? 1 : shimmerIntensity,
             })}${CLAUDE_ORANGE}${dotsSuffix}${RESET}`
             : `${getSpinnerVerbColor(verbFade)}${verb}${dotsSuffix}${RESET}`;
         if (statusParts.length > 0) {
@@ -1317,7 +1328,8 @@ export default function (pi: ExtensionAPI) {
                 return;
             }
             spinnerShimmerSeed = Math.floor(Math.random() * 4_000);
-            spinnerShimmerUntil = Date.now() + SPINNER_SHIMMER_DURATION_MS;
+            spinnerShimmerStartedAt = Date.now();
+            spinnerShimmerUntil = spinnerShimmerStartedAt + SPINNER_SHIMMER_DURATION_MS;
             syncWorkingMessage(true);
             scheduleSpinnerShimmerFrame();
         });
@@ -1348,6 +1360,7 @@ export default function (pi: ExtensionAPI) {
         spinnerShimmerFrame?.();
         spinnerShimmerFrame = null;
         spinnerShimmerUntil = 0;
+        spinnerShimmerStartedAt = 0;
     }
 
     /** Fresh typewriter + optional dot loops at the start of each turn. */
