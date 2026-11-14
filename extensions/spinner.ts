@@ -546,7 +546,6 @@ const SPINNER_VERBS = [
     "Consulting ancient scrolls",
     "Reading tea leaves",
     "Shaking the magic 8-ball",
-    "Sacrificing to the demo gods",
     "Warming up the hamsters",
     "Spinning up the squirrels",
     "Caffeinating",

@@ -84,7 +84,6 @@ import {
 } from "./bash-intent";
 import { detectBashFileEdit, type BashFileEdit } from "./bash-file-edit";
 import { getUserSettingsPath } from "./settings-path";
-import { noteShimmerActivity, noteShimmerRow, renderShimmerText, setShimmerRenderProvider, shimmerRowInfo, SHIMMER_HOST_KEY } from "./shimmer-text";
 import {
 	blendForContrast,
 	mixRgb as mixThemeRgb,
@@ -2440,11 +2439,6 @@ class HiddenThinkingSummary {
 		this.body = stripAnsi(body).trim();
 	}
 
-	/** True while this row is the streaming-thinking placeholder. */
-	isShimmerText(): boolean {
-		return this.body === "Thinking...";
-	}
-
 	setSummary(summaryText: string): void {
 		const body = stripAnsi(summaryText).trim();
 		if (this.body === body) return;
@@ -2473,16 +2467,7 @@ class HiddenThinkingSummary {
 			this.cachedLines = [""];
 			return this.cachedLines;
 		}
-		// Live thinking rows shimmer (Claude Code-style sweeping highlight);
-		// everything else keeps the static dim summary.
-		const shimmer = shimmerRowInfo(this);
-		const shimmerSettings = shimmer ? readSettings() : undefined;
-		const bodyLine = shimmer
-			? renderShimmerText(this.body, WORKED_LINE_FG, shimmer.seed, this.hovered, Date.now(), {
-				direction: shimmerSettings?.spinnerShimmerDirection,
-				color: shimmerSettings?.spinnerShimmerColor,
-			})
-			: thinkingSummaryStyledText(this.body, this.hovered);
+		const bodyLine = thinkingSummaryStyledText(this.body, this.hovered);
 		const line = padRenderedLineToWidth(`   ${bodyLine}`, safeWidth);
 		this.cachedWidth = width;
 		this.cachedHovered = this.hovered;
@@ -3016,7 +3001,7 @@ class DottedParagraph {
 	}
 }
 
-function replaceHiddenThinkingPlaceholders(container: { children?: any[] }, message: any, host?: unknown): void {
+function replaceHiddenThinkingPlaceholders(container: { children?: any[] }, message: any): void {
 	if (!container?.children) return;
 	const summary = hiddenThinkingSummaryForMessage(message);
 	let firstReplaced = false;
@@ -3026,12 +3011,6 @@ function replaceHiddenThinkingPlaceholders(container: { children?: any[] }, mess
 		if (inner instanceof HiddenThinkingSummary || (inner as any)?.constructor?.name === "HiddenThinkingSummary") {
 			if (!firstReplaced) {
 				inner.setSummary(summary);
-				if (host) {
-					// Components can be rebuilt around an existing summary row; keep
-					// the shimmer ticker pointed at the current host and message.
-					(inner as any)[SHIMMER_HOST_KEY] = host;
-					noteShimmerRow(inner, message);
-				}
 				firstReplaced = true;
 			} else {
 				container.children.splice(i, 1);
@@ -3042,14 +3021,6 @@ function replaceHiddenThinkingPlaceholders(container: { children?: any[] }, mess
 		if (isHiddenThinkingPlaceholderText(inner)) {
 			if (!firstReplaced) {
 				const summaryComp = new HiddenThinkingSummary(summary);
-				if (host) {
-					// The shimmer ticker clears this since the row's shimmer
-					// frames must bypass the message render cache.
-					(summaryComp as any)[SHIMMER_HOST_KEY] = host;
-					// Phase key = the message, so row rebuilds during streaming
-					// keep the same sweep seed instead of restarting it.
-					noteShimmerRow(summaryComp, message);
-				}
 				if ((child as any)?.child !== undefined) {
 					(child as any).child = summaryComp;
 				} else {
@@ -3679,7 +3650,7 @@ function patchAssistantMessages(): void {
 		const container = (this as any).contentContainer;
 		if (!container?.children) return;
 		if (hideThinking && messageHasThinkingContent(message)) {
-			replaceHiddenThinkingPlaceholders(container, message, this);
+			replaceHiddenThinkingPlaceholders(container, message);
 		}
 		const mdTheme = (this as any).markdownTheme;
 		for (let i = container.children.length - 1; i >= 0; i--) {
@@ -6943,8 +6914,6 @@ function trackThinkingBlockEvents(event: any, ctx?: any): void {
 	const message = event?.message;
 	if (!evt || typeof evt.type !== "string") return;
 	function refreshThinkingChrome(): void {
-		// The shimmer ticker reuses this handle each frame to nudge renders.
-		setShimmerRenderProvider(() => ctx?.ui);
 		try {
 			ctx?.ui?.invalidate?.();
 			ctx?.ui?.requestRender?.();
@@ -6961,7 +6930,6 @@ function trackThinkingBlockEvents(event: any, ctx?: any): void {
 
 	if (evt.type === "thinking_start") {
 		thinkingBlockInFlight = true;
-		noteShimmerActivity(true);
 		thinkingBlockStartMs = Date.now();
 		if (message?.role === "assistant") {
 			thinkingActiveMessages.add(thinkingStateKey(message));
@@ -6972,7 +6940,6 @@ function trackThinkingBlockEvents(event: any, ctx?: any): void {
 	}
 	if (evt.type === "thinking_end") {
 		thinkingBlockInFlight = false;
-		noteShimmerActivity(false);
 		const duration = thinkingBlockStartMs > 0
 			? Math.max(0, Date.now() - thinkingBlockStartMs)
 			: undefined;
@@ -6993,7 +6960,6 @@ function trackThinkingBlockEvents(event: any, ctx?: any): void {
 	if (hasThinkingActiveMetadata(message) || thinkingBlockInFlight) {
 		if (evt.type === "text_start" || evt.type === "text_delta" || evt.type === "toolcall_start" || evt.type === "toolcall_end") {
 			thinkingBlockInFlight = false;
-			noteShimmerActivity(false);
 			const duration = thinkingBlockStartMs > 0 ? Math.max(0, Date.now() - thinkingBlockStartMs) : undefined;
 			if (message?.role === "assistant") thinkingActiveMessages.delete(thinkingStateKey(message));
 			if (typeof duration === "number" && duration <= MAX_REASONABLE_THINKING_DURATION_MS && message?.role === "assistant") {
@@ -7046,7 +7012,6 @@ function registerThinkingLabels(pi: ExtensionAPI): void {
 			// global in-flight flag set and the next message renders a stale
 			// "Thinking..." row until its own thinking events arrive.
 			thinkingBlockInFlight = false;
-			noteShimmerActivity(false);
 			thinkingBlockStartMs = 0;
 			thinkingActiveMessages.delete(thinkingStateKey(message));
 			streamingAssistantContents.add(thinkingStateKey(message));
@@ -7064,7 +7029,6 @@ function registerThinkingLabels(pi: ExtensionAPI): void {
 			// into its "Thought for Xs" duration here so the row always resolves
 			// at the end of the message instead of sticking into later calls.
 			thinkingBlockInFlight = false;
-			noteShimmerActivity(false);
 			thinkingActiveMessages.delete(thinkingStateKey(message));
 			streamingAssistantContents.delete(thinkingStateKey(message));
 			if (getThinkingDurationMetadata(message) === undefined && thinkingBlockStartMs > 0) {
@@ -7096,7 +7060,6 @@ function registerThinkingLabels(pi: ExtensionAPI): void {
 	pi.on("agent_end", async () => {
 		currentAgentWorkStartMs = undefined;
 		currentAssistantMessageStartMs = undefined;
-		noteShimmerActivity(false);
 	});
 	pi.on("session_start", async () => {
 		// Reset session-wide accumulators on every session transition (new / resume /
@@ -7110,7 +7073,6 @@ function registerThinkingLabels(pi: ExtensionAPI): void {
 		currentAssistantMessageStartMs = undefined;
 		sessionStartMs = undefined;
 		userTurnCount = 0;
-		noteShimmerActivity(false);
 	});
 	pi.on("context", async (event) => {
 		const messages = (event as any)?.messages;
